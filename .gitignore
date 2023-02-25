@@ -129,4 +129,5 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-Firebase_key.json
+key.json
+neis-api.json

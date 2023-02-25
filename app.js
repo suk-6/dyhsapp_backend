@@ -1,7 +1,8 @@
 const express = require("express");
 const axios = require("axios");
 const admin = require("firebase-admin");
-const serviceAccount = require("./Firebase_key.json");
+const serviceAccount = require("./key.json");
+const neis_api = require("./neis-api.json");
 
 const app = express();
 
@@ -12,10 +13,10 @@ admin.initializeApp({
 });
 
 // FCM 메시지 생성 함수
-function createFCMMessage(topic, subject, classNum, period) {
+function createFCMMessage(topic, subject, grade, classNum, period) {
   return {
     notification: {
-      title: `오늘의 ${classNum}반 시간표`,
+      title: `오늘의 ${grade}학년 ${classNum}반 시간표`,
       body: `${period}교시: ${subject}`,
     },
     topic: topic,
@@ -39,6 +40,28 @@ async function sendNotification(topic, message) {
   }
 }
 
+async function apicall(Date) {
+  const queryParams = {
+    KEY: neis_api.neisKey,
+    Type: "json",
+    // pIndex: 1,
+    pSize: 220,
+    ATPT_OFCDC_SC_CODE: neis_api.OECODE,
+    SD_SCHUL_CODE: neis_api.SCCODE,
+    TI_FROM_YMD: Date,
+    TI_TO_YMD: Date,
+    // GRADE: grade,
+    // CLASS_NM: classNum,
+    // AY: 2022,
+    // SEM: 1,
+  };
+
+  const url = "https://open.neis.go.kr/hub/hisTimetable";
+
+  const response = await axios.get(url, { params: queryParams });
+  return response.data;
+}
+
 // 매 시 50분에 알림 전송
 setInterval(async () => {
   const currentTime = new Date();
@@ -50,53 +73,61 @@ setInterval(async () => {
   const formattedMonth = month < 10 ? `0${month}` : `${month}`;
   const formattedDay = day < 10 ? `0${day}` : `${day}`;
 
-  const formattedDate = `${year}${formattedMonth}${formattedDay}`;
-  // const formattedDate = "20220321";
+  // const formattedDate = `${year}${formattedMonth}${formattedDay}`;
+  const formattedDate = "20220321";
+  const TestMod = true;
 
-  if (currentTime.getHours() === 23) {
+  if (
+    TestMod ||
+    (currentTime.getHours() === 8 && currentTime.getMinutes() === 50) ||
+    (currentTime.getHours() === 9 && currentTime.getMinutes() === 50) ||
+    (currentTime.getHours() === 10 && currentTime.getMinutes() === 50) ||
+    (currentTime.getHours() === 11 && currentTime.getMinutes() === 50) ||
+    (currentTime.getHours() === 13 && currentTime.getMinutes() === 40) ||
+    (currentTime.getHours() === 14 && currentTime.getMinutes() === 40) ||
+    (currentTime.getHours() === 15 && currentTime.getMinutes() === 40)
+  ) {
     console.log(`Sending notifications for ${currentTime}.`);
-
+    const data = await apicall(formattedDate);
     // 1학년 1반부터 3학년 10반까지의 시간표를 조회하고 알림 전송
     for (let grade = 1; grade <= 3; grade++) {
       for (let classNum = 1; classNum <= 10; classNum++) {
-        const queryParams = {
-          KEY: "neis-api-key",
-          Type: "json",
-          // pIndex: 1,
-          pSize: 220,
-          ATPT_OFCDC_SC_CODE: "J10",
-          SD_SCHUL_CODE: "7531328",
-          TI_FROM_YMD: formattedDate,
-          TI_TO_YMD: formattedDate,
-          // AY: 2022,
-          // SEM: 1,
-          // GRADE: grade,
-          // CLASS_NM: `${grade}${classNum}`,
-        };
-        const url = "https://open.neis.go.kr/hub/hisTimetable";
         try {
-          const response = await axios.get(url, { params: queryParams });
-          const data = response.data;
           if (data.hisTimetable[0].head[1].RESULT.CODE === "INFO-000") {
             // 조회된 데이터 중 학년, 반, 교시, 과목만 저장하고 알림 전송
             const subjectList = data.hisTimetable[1].row.map(
-              ({ ITRT_CNTNT, PERIO }) => ({
+              ({ GRADE, CLASS_NM, ITRT_CNTNT, PERIO }) => ({
+                APIgrade: GRADE,
+                APIclassNum: CLASS_NM,
                 subject: ITRT_CNTNT,
                 period: PERIO,
               })
             );
-            for (const { subject, period } of subjectList) {
-              const hour = currentTime.getHours();
+            console.log(subjectList);
+            for (const {
+              APIgrade,
+              APIclassNum,
+              subject,
+              period,
+            } of subjectList) {
+              // const hour = currentTime.getHours();
+              const hour = 9;
               if (Number(period) === getPeriod(hour)) {
-                const topic = `${grade}${classNum}`;
-                const message = createFCMMessage(
-                  topic,
-                  subject,
-                  classNum,
-                  period
-                );
-                console.log(message);
-                sendNotification(topic, message);
+                if (
+                  grade === Number(APIgrade) &&
+                  classNum === Number(APIclassNum)
+                ) {
+                  const topic = `${grade}${classNum}`;
+                  const message = createFCMMessage(
+                    topic,
+                    subject,
+                    APIgrade,
+                    APIclassNum,
+                    period
+                  );
+                  console.log(message);
+                  sendNotification(topic, message);
+                }
               }
             }
           } else {
@@ -113,7 +144,7 @@ setInterval(async () => {
       }
     }
   }
-}, 10000);
+}, 1000 * 10);
 
 // 서버 시작
 const port = 3000;
