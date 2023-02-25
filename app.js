@@ -117,7 +117,7 @@ setInterval(async () => {
                   grade === Number(APIgrade) &&
                   classNum === Number(APIclassNum)
                 ) {
-                  const topic = `${grade}${classNum}`;
+                  const topic = `${grade}-${classNum}`;
                   const message = createFCMMessage(
                     topic,
                     subject,
