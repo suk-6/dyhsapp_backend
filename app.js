@@ -87,12 +87,11 @@ const scheduleNotification = () => {
       (currentTime.getHours() * 60 + currentTime.getMinutes());
     const delay = timeDiff * 60 * 1000;
 
-    setTimeout(readyNotification, delay);
+    setTimeout(readyNotification, delay, currentTime);
   }
 }
 
-const readyNotification = async () => {
-  const currentTime = new Date();
+const readyNotification = async (currentTime) => {
   const year = currentTime.getFullYear();
   const month = currentTime.getMonth() + 1;
   const day = currentTime.getDate();
