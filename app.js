@@ -13,7 +13,7 @@ admin.initializeApp({
 });
 
 // FCM 메시지 생성 함수
-function createFCMMessage(topic, subject, grade, classNum, period) {
+const createFCMMessage = (topic, subject, grade, classNum, period) => {
   return {
     notification: {
       title: `오늘의 ${grade}학년 ${classNum}반 시간표`,
@@ -23,7 +23,7 @@ function createFCMMessage(topic, subject, grade, classNum, period) {
   };
 }
 
-function getPeriod(hour) {
+const getPeriod = (hour) => {
   if (hour < 8 || hour > 17) {
     return null;
   }
@@ -31,7 +31,7 @@ function getPeriod(hour) {
 }
 
 // 알림 전송 함수
-async function sendNotification(topic, message) {
+const sendNotification = async (topic, message) => {
   try {
     await admin.messaging().send(message);
     console.log(`Notification sent to topic "${topic}".`);
@@ -40,7 +40,7 @@ async function sendNotification(topic, message) {
   }
 }
 
-async function apicall(Date) {
+const apicall = async (Date) => {
   const queryParams = {
     KEY: neis_api.neisKey,
     Type: "json",
@@ -62,8 +62,36 @@ async function apicall(Date) {
   return response.data;
 }
 
-// 매 시 50분에 알림 전송
-setInterval(async () => {
+const scheduleNotification = () => {
+  const currentTime = new Date();
+  const targetTimes = [
+    { hour: 8, minute: 50 },
+    { hour: 9, minute: 50 },
+    { hour: 10, minute: 50 },
+    { hour: 11, minute: 50 },
+    { hour: 13, minute: 40 },
+    { hour: 14, minute: 40 },
+    { hour: 15, minute: 40 }
+  ];
+
+  const nextNotificationTime = targetTimes.find(
+    ({ hour, minute }) =>
+      currentTime.getHours() < hour ||
+      (currentTime.getHours() === hour && currentTime.getMinutes() < minute)
+  );
+
+  if (nextNotificationTime) {
+    const timeDiff =
+      nextNotificationTime.hour * 60 +
+      nextNotificationTime.minute -
+      (currentTime.getHours() * 60 + currentTime.getMinutes());
+    const delay = timeDiff * 60 * 1000;
+
+    setTimeout(readyNotification, delay);
+  }
+}
+
+const readyNotification = async () => {
   const currentTime = new Date();
   const year = currentTime.getFullYear();
   const month = currentTime.getMonth() + 1;
@@ -75,76 +103,69 @@ setInterval(async () => {
 
   // const formattedDate = `${year}${formattedMonth}${formattedDay}`;
   const formattedDate = "20220321";
-  const TestMod = true;
 
-  if (
-    TestMod ||
-    (currentTime.getHours() === 8 && currentTime.getMinutes() === 50) ||
-    (currentTime.getHours() === 9 && currentTime.getMinutes() === 50) ||
-    (currentTime.getHours() === 10 && currentTime.getMinutes() === 50) ||
-    (currentTime.getHours() === 11 && currentTime.getMinutes() === 50) ||
-    (currentTime.getHours() === 13 && currentTime.getMinutes() === 40) ||
-    (currentTime.getHours() === 14 && currentTime.getMinutes() === 40) ||
-    (currentTime.getHours() === 15 && currentTime.getMinutes() === 40)
-  ) {
-    console.log(`Sending notifications for ${currentTime}.`);
-    const data = await apicall(formattedDate);
-    // 1학년 1반부터 3학년 10반까지의 시간표를 조회하고 알림 전송
-    for (let grade = 1; grade <= 3; grade++) {
-      for (let classNum = 1; classNum <= 10; classNum++) {
-        try {
-          if (data.hisTimetable[0].head[1].RESULT.CODE === "INFO-000") {
-            // 조회된 데이터 중 학년, 반, 교시, 과목만 저장하고 알림 전송
-            const subjectList = data.hisTimetable[1].row.map(
-              ({ GRADE, CLASS_NM, ITRT_CNTNT, PERIO }) => ({
-                APIgrade: GRADE,
-                APIclassNum: CLASS_NM,
-                subject: ITRT_CNTNT,
-                period: PERIO,
-              })
-            );
-            console.log(subjectList);
-            for (const {
-              APIgrade,
-              APIclassNum,
-              subject,
-              period,
-            } of subjectList) {
-              // const hour = currentTime.getHours();
-              const hour = 9;
-              if (Number(period) === getPeriod(hour)) {
-                if (
-                  grade === Number(APIgrade) &&
-                  classNum === Number(APIclassNum)
-                ) {
-                  const topic = `${grade}-${classNum}`;
-                  const message = createFCMMessage(
-                    topic,
-                    subject,
-                    APIgrade,
-                    APIclassNum,
-                    period
-                  );
-                  console.log(message);
-                  sendNotification(topic, message);
-                }
+  console.log(`Sending notifications for ${currentTime}.`);
+  const data = await apicall(formattedDate);
+  // 1학년 1반부터 3학년 10반까지의 시간표를 조회하고 알림 전송
+  for (let grade = 1; grade <= 3; grade++) {
+    for (let classNum = 1; classNum <= 10; classNum++) {
+      try {
+        if (data.hisTimetable[0].head[1].RESULT.CODE === "INFO-000") {
+          // 조회된 데이터 중 학년, 반, 교시, 과목만 저장하고 알림 전송
+          const subjectList = data.hisTimetable[1].row.map(
+            ({ GRADE, CLASS_NM, ITRT_CNTNT, PERIO }) => ({
+              APIgrade: GRADE,
+              APIclassNum: CLASS_NM,
+              subject: ITRT_CNTNT,
+              period: PERIO,
+            })
+          );
+          console.log(subjectList);
+          for (const {
+            APIgrade,
+            APIclassNum,
+            subject,
+            period,
+          } of subjectList) {
+            // const hour = currentTime.getHours();
+            const hour = 9;
+            if (Number(period) === getPeriod(hour)) {
+              if (
+                grade === Number(APIgrade) &&
+                classNum === Number(APIclassNum)
+              ) {
+                const topic = `${grade}-${classNum}`;
+                const message = createFCMMessage(
+                  topic,
+                  subject,
+                  APIgrade,
+                  APIclassNum,
+                  period
+                );
+                console.log(message);
+                sendNotification(topic, message);
               }
             }
-          } else {
-            console.error(
-              `Error getting timetable data for grade ${grade}, class ${classNum}.`
-            );
           }
-        } catch (error) {
+        } else {
           console.error(
-            `Error getting timetable data for grade ${grade}, class ${classNum}:`,
-            error
+            `Error getting timetable data for grade ${grade}, class ${classNum}.`
           );
         }
+      } catch (error) {
+        console.error(
+          `Error getting timetable data for grade ${grade}, class ${classNum}:`,
+          error
+        );
       }
     }
   }
-}, 1000 * 10);
+  scheduleNotification();
+}
+
+// 초기 실행
+readyNotification();
+// scheduleNotification();
 
 // 서버 시작
 const port = 3000;
